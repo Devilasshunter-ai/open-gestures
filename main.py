@@ -1,4 +1,9 @@
 from logic.cooldown import Cooldown
+from gestures.export import Gestures
 
-a = Cooldown()
-print(a.static)
+gest_class = Gestures()
+gestures = gest_class.get_all()
+
+cooldown = Cooldown()
+print(cooldown.static)
+print(gestures)
