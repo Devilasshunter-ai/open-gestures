@@ -2,11 +2,7 @@
 gestures/static/point_down_1.py
 ────────────────────────────────
 Single-hand ✌️  Victory
-Action: Brightness Down
-
-Note: MediaPipe GestureRecognizer has no dedicated "point down" label.
-Victory (✌️) is used here as the closest available label and is distinct
-enough from all other bindings to avoid accidental triggers.
+Action: Brightness Down (Windows Compatible)
 """
 from __future__ import annotations
 
@@ -23,10 +19,9 @@ def matches(result) -> bool:
 
 def action() -> None:
     try:
-        import subprocess
-        subprocess.Popen(
-            ["brightnessctl", "set", "5%-"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        import screen_brightness_control as sbc
+        # Get current brightness and decrease by 5%
+        current_brightness = sbc.get_brightness(display=0)[0]
+        sbc.set_brightness(current_brightness - 5)
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")

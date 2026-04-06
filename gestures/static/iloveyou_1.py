@@ -1,17 +1,10 @@
-"""
-gestures/static/iloveyou_1.py
-──────────────────────────────
-Single-hand 🤟  ILoveYou
-Action: Mute / Unmute System Audio (toggle via pactl)
-
-Cycles the default sink mute state — works on PulseAudio and PipeWire.
-No display server connection needed.
-"""
 from __future__ import annotations
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 GESTURE_LABEL = "ILoveYou"
 GESTURE_NAME  = "iloveyou_1"
-
 
 def matches(result) -> bool:
     if not result.gestures or len(result.gestures) != 1:
@@ -19,13 +12,11 @@ def matches(result) -> bool:
     top = result.gestures[0][0]
     return top.category_name == GESTURE_LABEL and top.score >= 0.70
 
-
 def action() -> None:
     try:
-        import subprocess
-        subprocess.Popen(
-            ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume.SetMute(not volume.GetMute(), None)
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")

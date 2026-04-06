@@ -19,11 +19,11 @@ def matches(result) -> bool:
 
 def action() -> None:
     try:
-        from pynput.keyboard import Key, Controller
+        from pynput.keyboard import Key, Controller, KeyCode
         kb = Controller()
-        kb.press(Key.ctrl)
-        kb.press('-')
-        kb.release('-')
-        kb.release(Key.ctrl)
+        with kb.pressed(Key.ctrl):
+            # Using KeyCode ensures Windows recognizes the character correctly
+            kb.press(KeyCode.from_char('-'))
+            kb.release(KeyCode.from_char('-'))
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")
