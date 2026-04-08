@@ -3,8 +3,12 @@ gestures/static/point_down_2.py
 ────────────────────────────────
 Double-hand ✌️✌️  Victory (both hands)
 Action: Zoom Out (Ctrl+-)
+
+Cross-platform: uses explicit press/release which works reliably
+on both Windows and Linux (avoids stuck keys on some Linux WMs).
 """
 from __future__ import annotations
+from pynput.keyboard import Key, Controller
 
 GESTURE_LABEL = "Victory"
 GESTURE_NAME  = "point_down_2"
@@ -19,11 +23,10 @@ def matches(result) -> bool:
 
 def action() -> None:
     try:
-        from pynput.keyboard import Key, Controller, KeyCode
         kb = Controller()
-        with kb.pressed(Key.ctrl):
-            # Using KeyCode ensures Windows recognizes the character correctly
-            kb.press(KeyCode.from_char('-'))
-            kb.release(KeyCode.from_char('-'))
+        kb.press(Key.ctrl)
+        kb.press('-')
+        kb.release('-')
+        kb.release(Key.ctrl)
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")

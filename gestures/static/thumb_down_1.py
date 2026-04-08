@@ -1,11 +1,19 @@
+"""
+gestures/static/thumb_down_1.py
+────────────────────────────────
+Single-hand 👎  Thumb Down
+Action: Volume Down (-5%)
+
+Cross-platform: auto-detects Windows vs Linux at runtime.
+  Windows → pycaw (Windows Core Audio API)
+  Linux   → pactl (PulseAudio / PipeWire)
+"""
 from __future__ import annotations
-import pythoncom
-from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+import sys
 
 GESTURE_LABEL = "Thumb_Down"
 GESTURE_NAME  = "thumb_down_1"
+
 
 def matches(result) -> bool:
     if not result.gestures or len(result.gestures) != 1:
@@ -13,16 +21,28 @@ def matches(result) -> bool:
     top = result.gestures[0][0]
     return top.category_name == GESTURE_LABEL and top.score >= 0.70
 
+
 def action() -> None:
     try:
-        pythoncom.CoInitialize()
-        # GetSpeakers() returns an AudioDevice wrapper — access raw COM device via ._dev
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices._dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        current_vol = volume.GetMasterVolumeLevelScalar()
-        volume.SetMasterVolumeLevelScalar(max(0.0, current_vol - 0.05), None)
+        if sys.platform == "win32":
+            import pythoncom
+            from ctypes import cast, POINTER
+            from comtypes import CLSCTX_ALL
+            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+            pythoncom.CoInitialize()
+            try:
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices._dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                volume = cast(interface, POINTER(IAudioEndpointVolume))
+                current_vol = volume.GetMasterVolumeLevelScalar()
+                volume.SetMasterVolumeLevelScalar(max(0.0, current_vol - 0.05), None)
+            finally:
+                pythoncom.CoUninitialize()
+        else:
+            import subprocess
+            subprocess.Popen(
+                ["pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")
-    finally:
-        pythoncom.CoUninitialize()

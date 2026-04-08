@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 from pynput.keyboard import Key, Controller, KeyCode
 
@@ -18,3 +19,5 @@ def action() -> None:
             kb.release(KeyCode.from_char('-'))
     except Exception as exc:
         print(f"[{GESTURE_NAME}] {exc}")
+
+        
