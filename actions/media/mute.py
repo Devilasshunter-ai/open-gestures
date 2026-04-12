@@ -2,10 +2,10 @@ import subprocess
 from actions.base import BaseAction
 from actions.system import system
 
-class PlayMedia(BaseAction):
-    name = "Play Media"
-    description = "Play system media"
-    id = "play_media"
+class MuteMedia(BaseAction):
+    name = "Mute Media"
+    description = "Mute system media"
+    id = "mute_media"
 
     def execute(self) -> None:
         sys = system()
