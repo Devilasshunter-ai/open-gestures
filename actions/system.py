@@ -1,3 +1,6 @@
 def system():
     import sys
-    return sys.platform
+    p = sys.platform
+    if p == "darwin": return "mac"
+    if p.startswith("win"): return "win"
+    return "linux"
