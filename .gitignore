@@ -1,2 +1,2 @@
-main.py.old
-.extra/
+__pycache__/
+*.pyc   
