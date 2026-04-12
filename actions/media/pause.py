@@ -13,7 +13,7 @@ class PauseMedia(BaseAction):
         if sys=="linux":
             try:
                 subprocess.Popen(
-                    ["playerctl", "play"],
+                    ["playerctl", "pause"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
             except Exception as exc:

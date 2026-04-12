@@ -13,9 +13,14 @@ from actions.base import BaseAction
 _action_registry: dict[str, BaseAction] = {}
 _registry_loaded = False
 
-# Subdirectories under actions/
-_ACTION_PKGS = ["actions.app", "actions.linux", "actions.mac", "actions.media",
-                "actions.util", "actions.win"]
+_ACTION_PKGS = [
+    "actions.app",
+    "actions.linux",
+    "actions.mac",
+    "actions.media",
+    "actions.util",
+    "actions.win",
+]
 
 
 def _build_action_registry() -> None:
@@ -23,7 +28,6 @@ def _build_action_registry() -> None:
     base_path = Path(__file__).parent.parent / "actions"
 
     for pkg_name in _ACTION_PKGS:
-        # Convert "actions.media" → path actions/media
         subdir = base_path / pkg_name.split(".", 1)[1]
         if not subdir.exists():
             continue
@@ -36,7 +40,6 @@ def _build_action_registry() -> None:
                 print(f"[Router] Failed to import {full_name}: {exc}")
                 continue
 
-            # Find all concrete BaseAction subclasses in this module
             for _name, obj in inspect.getmembers(mod, inspect.isclass):
                 if (
                     issubclass(obj, BaseAction)
@@ -48,13 +51,13 @@ def _build_action_registry() -> None:
                         instance = obj()
                         _action_registry[instance.id] = instance
                     except Exception as exc:
-                        print(f"[Router] Failed to instantiate {obj}: {exc}")
+                        print(f"[Router] Failed to instantiate {obj.__name__}: {exc}")
 
     _registry_loaded = True
     print(f"[Router] Registered {len(_action_registry)} actions:")
     for action_id in sorted(_action_registry):
         a = _action_registry[action_id]
-        print(f"  • {action_id:20s} — {a.name}")
+        print(f"  • {action_id:25s} — {a.name}")
 
 
 def _get_action(action_id: str) -> Optional[BaseAction]:
@@ -106,6 +109,12 @@ class GestureRouter:
         _build_action_registry()  # eager load so first gesture fires instantly
 
     def route(self, result) -> Optional[str]:
+        """
+        Check all static gesture modules against the latest GestureRecognizer
+        result. For the first match whose cooldown has elapsed, look up the
+        mapped action in config.json and execute it.
+        Returns the GESTURE_NAME that fired, or None.
+        """
         if result is None:
             return None
 
@@ -119,21 +128,36 @@ class GestureRouter:
                 if not self._cooldown.can_trigger(name):
                     continue
 
-                action_id = resolve_gesture_action(name)
-                if action_id is None:
-                    print(f"[Router] No action mapped for '{name}' — skipping")
-                    continue
-
-                action = _get_action(action_id)
-                if action is None:
-                    print(f"[Router] Action '{action_id}' not found in registry — skipping")
-                    continue
-
-                action.execute()
-                self._cooldown.record(name)
-                return name
+                fired = self.dispatch_by_name(name)
+                if fired:
+                    self._cooldown.record(name)
+                    return fired
 
             except Exception as exc:
                 print(f"[Router] Error routing {mod.GESTURE_NAME}: {exc}")
 
         return None
+
+    def dispatch_by_name(self, gesture_name: str) -> Optional[str]:
+        """
+        Look up the action mapped to gesture_name in config.json and execute it.
+        Used directly by main.py for swipe gestures detected by SwipeTracker,
+        which bypass the matches() system entirely.
+        Returns gesture_name if action fired successfully, else None.
+        """
+        action_id = resolve_gesture_action(gesture_name)
+        if action_id is None:
+            print(f"[Router] No action mapped for '{gesture_name}' — skipping")
+            return None
+
+        action = _get_action(action_id)
+        if action is None:
+            print(f"[Router] Action '{action_id}' not found in registry — skipping")
+            return None
+
+        try:
+            action.execute()
+            return gesture_name
+        except Exception as exc:
+            print(f"[Router] Error executing '{action_id}': {exc}")
+            return None

@@ -11,20 +11,19 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 from mediapipe.tasks.python.vision.core.vision_task_running_mode import VisionTaskRunningMode
 
-from core.cooldown import Cooldown
-from core.router  import GestureRouter
+from core.cooldown     import Cooldown
+from core.router       import GestureRouter
+from core.swipe_tracker import SwipeTracker
 
-# Forces OpenCV to use X11/xcb backend on Wayland — without this cv2.imshow() can crash
+# Forces OpenCV to use X11/xcb backend on Wayland
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 MODEL_PATH = Path(__file__).parent / "models" / "gesture_recognizer.task"
 
 
-# ── Thread-safe result slot ────────────────────────────────────────────────
+# ── Thread-safe result slot (GestureRecognizer) ────────────────────────────
 
 class _ResultSlot:
-    """Passes MediaPipe results from its callback thread to the main loop safely."""
-
     def __init__(self) -> None:
         self._lock   = threading.Lock()
         self._result = None
@@ -45,7 +44,6 @@ class _ResultSlot:
 
 
 def _format_label(result) -> str:
-    """Converts a GestureRecognizerResult into a readable string for the overlay."""
     if not result or not result.gestures:
         return ""
     parts = []
@@ -59,11 +57,11 @@ def _format_label(result) -> str:
     return "  |  ".join(parts)
 
 
-# ── MediaPipe recognizer ───────────────────────────────────────────────────
+# ── MediaPipe GestureRecognizer ────────────────────────────────────────────
 
 def _build_recognizer(slot: _ResultSlot) -> mp_vision.GestureRecognizer:
     def _on_result(result, _output_image, _timestamp_ms: int) -> None:
-        slot.put(result)  # store only — never draw from a callback thread
+        slot.put(result)
 
     options = mp_vision.GestureRecognizerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=str(MODEL_PATH)),
@@ -103,8 +101,10 @@ def main() -> None:
             "gesture_recognizer.task -O models/gesture_recognizer.task"
         )
 
-    slot   = _ResultSlot()
-    router = GestureRouter(Cooldown())  # router loads gestures + actions internally
+    slot    = _ResultSlot()
+    cooldown = Cooldown()
+    router  = GestureRouter(cooldown)
+    swiper  = SwipeTracker()
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -135,21 +135,34 @@ def main() -> None:
             bgr = cv2.flip(bgr, 1)
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
+            # Strictly increasing timestamp — required by both recognizers
             ts_ms = int((time.monotonic() - t0) * 1000)
             if ts_ms <= last_ts:
                 ts_ms = last_ts + 1
             last_ts = ts_ms
 
-            # .copy() required — MediaPipe holds a buffer reference across threads
-            recognizer.recognize_async(
-                mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb.copy()),
-                ts_ms,
-            )
+            # .copy() required — MediaPipe holds buffer reference across threads
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb.copy())
 
+            # Feed the same frame to both models simultaneously
+            recognizer.recognize_async(mp_image, ts_ms)
+            swiper.feed(mp_image, ts_ms)
+
+            # ── Route static gestures ──────────────────────────────────────
             result    = slot.get()
             triggered = router.route(result)
-            now       = time.monotonic()
 
+            # ── Route swipe gestures ───────────────────────────────────────
+            # SwipeTracker returns a gesture name like "swipe_left_1" directly;
+            # we pass it through the cooldown + action dispatch in the router.
+            if not triggered:
+                swipe = swiper.detect()
+                if swipe and cooldown.can_trigger(swipe):
+                    triggered = router.dispatch_by_name(swipe)
+                    if triggered:
+                        cooldown.record(swipe)
+
+            now = time.monotonic()
             if triggered:
                 fired_name       = triggered
                 fired_clear_time = now + 1.2
@@ -165,6 +178,7 @@ def main() -> None:
     finally:
         cap.release()
         recognizer.close()
+        swiper.close()
         cv2.destroyAllWindows()
         print("Exited cleanly.")
 
